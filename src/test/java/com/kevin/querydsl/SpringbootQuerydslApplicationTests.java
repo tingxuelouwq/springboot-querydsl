@@ -1,12 +1,15 @@
 package com.kevin.querydsl;
 
+import com.kevin.querydsl.dto.GoodDTO;
 import com.kevin.querydsl.entity.*;
 import com.kevin.querydsl.jpa.UserJPA;
 import com.kevin.querydsl.util.JsonUtil;
 import com.querydsl.core.QueryResults;
 import com.querydsl.core.types.ExpressionUtils;
 import com.querydsl.core.types.Predicate;
+import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
+import com.querydsl.jpa.JPAExpressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -21,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @SpringBootTest
 class SpringbootQuerydslApplicationTests {
@@ -116,6 +120,163 @@ class SpringbootQuerydslApplicationTests {
                 ).orderBy(qGoodInfo.order.desc())
                 .fetch();
         logger.info(JsonUtil.bean2Json(goods));
+    }
+
+    @Test
+    public void testCustomDTO() {
+        QGoodInfoEntity qGoodInfo = QGoodInfoEntity.goodInfoEntity;
+        QGoodTypeEntity qGoodType = QGoodTypeEntity.goodTypeEntity;
+        List<GoodDTO> result = jpaQueryFactory
+                .select(Projections.bean(
+                        GoodDTO.class,  // 指定返回的自定义实体的类型
+                        qGoodInfo.id,
+                        qGoodInfo.price,
+                        qGoodInfo.title,
+                        qGoodInfo.unit,
+                        qGoodType.name.as("typeName"),  // 使用别名对应dto内的typeName
+                        qGoodType.id.as("typeId")))
+                .from(qGoodInfo, qGoodType)
+                .where(qGoodType.id.eq(qGoodInfo.typeId))
+                .orderBy(qGoodInfo.order.desc())
+                .fetch();
+        logger.info(JsonUtil.bean2Json(result));
+    }
+
+    @Test
+    public void testCustomDTOByStream() {
+        QGoodInfoEntity qGoodInfo = QGoodInfoEntity.goodInfoEntity;
+        QGoodTypeEntity qGoodType = QGoodTypeEntity.goodTypeEntity;
+        List<GoodDTO> result = jpaQueryFactory
+                .select(
+                        qGoodInfo.id,
+                        qGoodInfo.price,
+                        qGoodInfo.title,
+                        qGoodInfo.unit,
+                        qGoodType.name,
+                        qGoodType.id
+                )
+                .from(qGoodInfo, qGoodType)
+                .where(qGoodType.id.eq(qGoodInfo.typeId))
+                .orderBy(qGoodInfo.order.desc())
+                .fetch()
+                .stream()
+                .map(tuple -> { //  //转换集合内的数据
+                    GoodDTO dto = new GoodDTO();
+                    dto.setId(tuple.get(qGoodInfo.id));
+                    dto.setPrice(tuple.get(qGoodInfo.price));
+                    dto.setPrice(tuple.get(qGoodInfo.price));
+                    dto.setTitle(tuple.get(qGoodInfo.title));
+                    dto.setUnit(tuple.get(qGoodInfo.unit));
+                    dto.setTypeId(tuple.get(qGoodType.id));
+                    dto.setTypeName(tuple.get(qGoodType.name));
+                    return dto;
+                })
+                .collect(Collectors.toList());
+        logger.info(JsonUtil.bean2Json(result));
+    }
+
+    @Test
+    public void testCount() {
+        QStudentEntity qStudent = QStudentEntity.studentEntity;
+        long count = jpaQueryFactory
+                .select(qStudent.id.count())
+                .from(qStudent)
+                .fetchOne();
+        logger.info("总数" + count);
+    }
+
+    @Test
+    public void testSum() {
+        QStudentEntity qStudent = QStudentEntity.studentEntity;
+        double sum = jpaQueryFactory
+                .select(qStudent.socre.sum())
+                .from(qStudent)
+                .fetchOne();
+        logger.info("总和" + sum);
+    }
+
+    @Test
+    public void testAvg() {
+        QStudentEntity qStudent = QStudentEntity.studentEntity;
+        double avg = jpaQueryFactory
+                .select(qStudent.socre.avg())
+                .from(qStudent)
+                .fetchOne();
+        logger.info("总和" + avg);
+    }
+
+    @Test
+    public void testMax() {
+        QStudentEntity qStudent = QStudentEntity.studentEntity;
+        double max = jpaQueryFactory
+                .select(qStudent.socre.max())
+                .from(qStudent)
+                .fetchOne();
+        logger.info("总和" + max);
+    }
+
+    @Test
+    public void testGroupBy() {
+        QStudentEntity qStudent = QStudentEntity.studentEntity;
+        double score = jpaQueryFactory
+                .select(qStudent.socre)
+                .from(qStudent)
+                .groupBy(qStudent.socre)
+                .having(qStudent.socre.gt(80))
+                .fetchOne();
+        logger.info("分数" + score);
+    }
+
+    @Test
+    public void testFindVegetables() {
+        QGoodInfoEntity qGoodInfo = QGoodInfoEntity.goodInfoEntity;
+        QGoodTypeEntity qGoodType = QGoodTypeEntity.goodTypeEntity;
+        List<GoodInfoEntity> result = jpaQueryFactory
+                .selectFrom(qGoodInfo)
+                .where(
+                        qGoodInfo.typeId.in(
+                                JPAExpressions.select(
+                                        qGoodType.id
+                                )
+                                .from(qGoodType)
+                                .where(qGoodType.name.like("%蔬菜%"))
+                        )
+                )
+                .fetch();
+        logger.info(JsonUtil.bean2Json(result));
+    }
+
+    @Test
+    public void testFindMaxPrices() {
+        QGoodInfoEntity qGoodInfo = QGoodInfoEntity.goodInfoEntity;
+        List<GoodInfoEntity> result = jpaQueryFactory
+                .selectFrom(qGoodInfo)
+                .where(
+                        qGoodInfo.price.eq(
+                                JPAExpressions.select(
+                                        qGoodInfo.price.max()
+                                )
+                                .from(qGoodInfo)
+                        )
+                )
+                .fetch();
+        logger.info(JsonUtil.bean2Json(result));
+    }
+
+    @Test
+    public void testFindGTAvgPrices() {
+        QGoodInfoEntity qGoodInfo = QGoodInfoEntity.goodInfoEntity;
+        List<GoodInfoEntity> result = jpaQueryFactory
+                .selectFrom(qGoodInfo)
+                .where(
+                        qGoodInfo.price.gt(
+                                JPAExpressions.select(
+                                        qGoodInfo.price.avg()
+                                ).from(qGoodInfo)
+                        )
+                )
+                .fetch();
+        logger.info(JsonUtil.bean2Json(result));
     }
 
     /**********************SpringDataJPA&QueryDSL整合*******************/
